@@ -18,3 +18,5 @@ require (
 	github.com/stretchr/testify v1.8.0 // indirect
 	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
 )
+
+replace github.com/x-motemen/blogsync => github.com/theoremoon/blogsync v0.0.0-20240803073739-d54c733af1d5
