@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,6 +24,7 @@ func newApp() *cli.App {
 		commandPost,
 		commandList,
 		commandRemove,
+		commandSync,
 	}
 	app.Flags = []cli.Flag{
 		&cli.StringFlag{
@@ -364,6 +366,79 @@ var commandRemove = &cli.Command{
 			err = newBroker(bc, c.App.Writer).RemoveEntry(entry)
 			if err != nil {
 				return err
+			}
+		}
+		return nil
+	},
+}
+
+var commandSync = &cli.Command{
+	Name:  "sync",
+	Usage: "sync entries adjusting local entries to remote",
+	Action: func(c *cli.Context) error {
+		conf, err := loadConfiguration()
+		if err != nil {
+			return err
+		}
+
+		blogs := c.Args().Slice()
+		if len(blogs) == 0 {
+			blogs = conf.localBlogIDs()
+		}
+		if len(blogs) == 0 {
+			cli.ShowCommandHelp(c, "sync")
+			return errCommandHelp
+		}
+
+		for _, blog := range blogs {
+			blogConfig := conf.Get(blog)
+			if blogConfig == nil {
+				return fmt.Errorf("blog not found: %s", blog)
+			}
+
+			b := newBroker(blogConfig, c.App.Writer)
+			remoteEntries, err := b.FetchRemoteEntries(true, true)
+			if err != nil {
+				return err
+			}
+			localEntries, err := b.ListLocalEntries()
+			if err != nil {
+				return err
+			}
+			localEntriesMap := make(map[string]*entry)
+			for _, le := range localEntries {
+				localEntriesMap[b.LocalPath(le)] = le
+			}
+
+			errs := make([]error, 0)
+			for _, re := range remoteEntries {
+				path := b.LocalPath(re)
+				le, exists := localEntriesMap[path]
+				if !exists {
+					// if the entry does not exist locally, remove it
+					if err := b.RemoveEntry(re); err != nil {
+						errs = append(errs, err)
+					}
+				} else {
+					// if the entry exists locally, update if different
+					if !isSameEntry(le, re) {
+						if err := b.PutEntry(le); err != nil {
+							errs = append(errs, err)
+						}
+					}
+					delete(localEntriesMap, path)
+				}
+			}
+
+			// if there are local entries that are not in remote, post them
+			for _, le := range localEntriesMap {
+				if err := b.PostEntry(le, false); err != nil {
+					errs = append(errs, err)
+				}
+			}
+
+			if len(errs) > 0 {
+				return errors.Join(errs...)
 			}
 		}
 		return nil

@@ -198,6 +198,32 @@ func (b *broker) PostEntry(e *entry, isPage bool) error {
 	return b.Store(newEntry, b.LocalPath(newEntry), "")
 }
 
+func (b *broker) ListLocalEntries() ([]*entry, error) {
+	entries := make([]*entry, 0)
+	if _, err := os.Stat(b.blogConfig.localRoot()); err != nil {
+		return nil, err
+	}
+	filepath.WalkDir(b.blogConfig.localRoot(), func(path string, d os.DirEntry, err error) error {
+		if d.IsDir() {
+			if d.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		e, err := entryFromFile(path)
+		if err != nil {
+			return nil
+		}
+		if e.entryHeader.Title == "" {
+			// だいたいこれはエントリじゃないやつなので無視
+			return nil
+		}
+		entries = append(entries, e)
+		return nil
+	})
+	return entries, nil
+}
+
 func (b *broker) RemoveEntry(e *entry) error {
 	err := b.Client.DeleteEntry(e.EditURL)
 	if err != nil {

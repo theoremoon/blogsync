@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -310,4 +311,36 @@ func extractEntryPath(p string) (subdir string, entryPath string) {
 	}
 	entryPath = strings.TrimSuffix(stuffs[1], entryExt)
 	return stuffs[0], entryPath
+}
+
+func isSameEntry(a, b *entry) bool {
+	if a.Title != b.Title {
+		return false
+	}
+	if (a.Date == nil && b.Date != nil) || (a.Date != nil && b.Date == nil) {
+		return false
+	}
+	if !a.Date.Equal(*b.Date) {
+		return false
+	}
+	if a.IsDraft != b.IsDraft {
+		return false
+	}
+	if a.CustomPath != b.CustomPath {
+		return false
+	}
+	if len(a.Category) != len(b.Category) {
+		return false
+	}
+	sort.Strings(a.Category)
+	sort.Strings(b.Category)
+	for i, c := range a.Category {
+		if c != b.Category[i] {
+			return false
+		}
+	}
+	if a.Content != b.Content {
+		return false
+	}
+	return true
 }
